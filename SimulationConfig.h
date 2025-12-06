@@ -4,7 +4,7 @@
 struct SimulationConfig {
     std::string inputFile;
     std::string outputBaseName;
-    int maxIterations = 50;
+    int maxIterations = 100;
     bool toroidal = false;
     bool graphicMode = false;
 };

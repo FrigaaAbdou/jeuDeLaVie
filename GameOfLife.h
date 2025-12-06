@@ -19,5 +19,6 @@ public:
     void step();                 // une itération
     bool isStable() const;       // grille inchangée
     bool hasFinished() const;    // stable ou max atteint
+    int currentIteration() const { return m_currentIteration; }
     const Grid& currentGrid() const { return m_grid; }
 };
