@@ -3,6 +3,7 @@
 #include "GameOfLife.h"
 #include "ConwayRule.h"
 #include <SFML/Graphics.hpp>
+#include <optional>
 #include <iostream>
 
 static void drawGrid(sf::RenderWindow& window,
@@ -12,7 +13,8 @@ static void drawGrid(sf::RenderWindow& window,
     sf::RectangleShape rect(sf::Vector2f(cellSize - 1, cellSize - 1));
     for (int r = 0; r < grid.rows(); ++r) {
         for (int c = 0; c < grid.cols(); ++c) {
-            rect.setPosition(c * cellSize, r * cellSize);
+            rect.setPosition(sf::Vector2f(static_cast<float>(c * cellSize),
+                                          static_cast<float>(r * cellSize)));
             rect.setFillColor(grid.at(r,c).isAlive()
                               ? sf::Color::White
                               : sf::Color(30,30,30));
@@ -29,7 +31,9 @@ void GraphicRunner::run(const SimulationConfig& config) {
 
         const int cellSize = 20;
         sf::RenderWindow window(
-            sf::VideoMode(grid.cols()*cellSize, grid.rows()*cellSize),
+            sf::VideoMode(sf::Vector2u(
+                static_cast<unsigned int>(grid.cols() * cellSize),
+                static_cast<unsigned int>(grid.rows() * cellSize))),
             "Game of Life");
 
         window.setFramerateLimit(30);
@@ -39,14 +43,13 @@ void GraphicRunner::run(const SimulationConfig& config) {
         bool paused = false;
 
         while (window.isOpen()) {
-            sf::Event event;
-            while (window.pollEvent(event)) {
-                if (event.type == sf::Event::Closed)
+            while (const std::optional<sf::Event> event = window.pollEvent()) {
+                if (event->is<sf::Event::Closed>())
                     window.close();
-                if (event.type == sf::Event::KeyPressed) {
-                    if (event.key.code == sf::Keyboard::Space)
+                if (const auto* keyPress = event->getIf<sf::Event::KeyPressed>()) {
+                    if (keyPress->code == sf::Keyboard::Key::Space)
                         paused = !paused;
-                    if (event.key.code == sf::Keyboard::N && paused)
+                    if (keyPress->code == sf::Keyboard::Key::N && paused)
                         game.step();
                 }
             }
