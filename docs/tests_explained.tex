@@ -1,0 +1,99 @@
+\documentclass[12pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{geometry}
+\geometry{margin=2.5cm}
+\usepackage{enumitem}
+\usepackage{hyperref}
+\usepackage{courier}
+\usepackage{listings}
+\lstset{
+  basicstyle=\ttfamily\small,
+  columns=fullflexible,
+  keepspaces=true,
+  showstringspaces=false
+}
+
+\title{Jeu de la vie --- Tests unitaires}
+\author{Projet C++17 (Grid / GameOfLife / ConwayRule)}
+\date{}
+
+\begin{document}
+\maketitle
+
+\section{Objectif}
+Documenter les tests unitaires ajoutés pour la logique du Jeu de la vie (sans SFML). Les tests valident la règle de Conway, la stabilité et quelques cas limites courants.
+
+\section{Architecture du runner}
+\begin{itemize}[leftmargin=1.1em]
+  \item Fichier \texttt{tests/main.cpp} : harness minimaliste (pas de framework externe).
+  \item Compilation via \texttt{make test} qui produit \texttt{tests/test\_runner} en liant uniquement les fichiers de logique (\texttt{Grid.cpp}, \texttt{GameOfLife.cpp}, \texttt{InitialStateLoader.cpp}, \texttt{GridExporter.cpp}).
+  \item Aucun lien avec SFML : exécution en ligne de commande uniquement.
+  \item Arrêt immédiat sur échec (\texttt{std::exit(1)}) pour remonter clairement la première assertion en défaut.
+\end{itemize}
+
+\section{Harness et helpers}
+\begin{itemize}[leftmargin=1.1em]
+  \item \texttt{expect(cond, message)} : vérifie une condition, affiche ``Test failed: \ldots'' et quitte en cas d'échec.
+  \item \texttt{logCase}/\texttt{logOk} : traces lisibles en console pour chaque cas de test.
+  \item \texttt{makeGrid(vector<string>)} : construit une grille en mémoire à partir de lignes ``0/1'' (``1'' = cellule vivante).
+  \item \texttt{expectGrid(grid, rows, msg)} : compare une grille avec un motif attendu (dimensions et états des cellules).
+\end{itemize}
+
+\section{Cas de test couverts}
+\begin{enumerate}[leftmargin=1.1em]
+  \item \textbf{Bloc (still life) stable} \\
+    Motif $2\times2$ vivant entouré de cellules mortes. Après un pas de simulation :
+    \begin{itemize}
+      \item Le motif reste identique (vérification par \texttt{expectGrid}).
+      \item \texttt{isStable()} retourne vrai (grille inchangée).
+      \item \texttt{hasFinished()} retourne vrai (stabilité atteinte).
+    \end{itemize}
+  \item \textbf{Blinker (oscillateur période 2)} \\
+    Ligne de trois cellules vivantes. Après un pas, elle devient colonne; après deux pas, revient à l'horizontale. Les deux phases sont comparées à des motifs attendus.
+  \item \textbf{Cellule isolée qui meurt} \\
+    Une cellule vivante sans voisins doit disparaître au pas suivant (mort par sous-population).
+\end{enumerate}
+
+\section{Extrait de code (harness)}
+\begin{lstlisting}[language=C++]
+static void expect(bool condition, const std::string& message) {
+    if (!condition) {
+        std::cerr << "Test failed: " << message << "\n";
+        std::exit(1);
+    }
+}
+
+static Grid makeGrid(const std::vector<std::string>& rows) {
+    Grid g(rows.size(), rows.front().size(), false);
+    for (int y = 0; y < g.rows(); ++y)
+        for (int x = 0; x < g.cols(); ++x)
+            g.at(y, x).setState(rows[y][x] == '1'
+                ? static_cast<CellState*>(new AliveState())
+                : static_cast<CellState*>(new DeadState()));
+    return g;
+}
+\end{lstlisting}
+
+\section{Exécution}
+\begin{itemize}[leftmargin=1.1em]
+  \item \texttt{make test} pour compiler le binaire \texttt{tests/test\_runner}.
+  \item \texttt{tests/test\_runner} pour exécuter les cas. Sortie attendue :
+\end{itemize}
+\begin{lstlisting}
+Running Game of Life unit tests...
+[CASE] Still life (block) remains stable... OK
+[CASE] Blinker oscillates with period 2... OK
+[CASE] Isolated live cell dies in one step... OK
+All tests passed.
+\end{lstlisting}
+
+\section{Extensions possibles}
+\begin{itemize}[leftmargin=1.1em]
+  \item Ajouter un test de mode torique (\texttt{Grid} avec \texttt{toroidal=true}) pour vérifier le comptage des voisins.
+  \item Ajouter des tests d'échec du chargeur de fichier (\texttt{InitialStateLoader}) pour détecter un format invalide.
+  \item Couvrir des motifs plus longs (planeur, pulsar) et la détection de stabilité après plusieurs pas.
+  \item Intégrer un framework léger (Catch2/doctest) si les besoins de reporting/fixtures augmentent.
+\end{itemize}
+
+\end{document}

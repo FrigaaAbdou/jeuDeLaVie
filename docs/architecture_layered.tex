@@ -1,0 +1,110 @@
+\documentclass[12pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{geometry}
+\geometry{margin=2.5cm}
+\usepackage{enumitem}
+\usepackage{hyperref}
+\usepackage{listings}
+\lstset{
+  basicstyle=\ttfamily\small,
+  columns=fullflexible,
+  keepspaces=true,
+  showstringspaces=false
+}
+
+\title{Jeu de la vie — Architecture en couches}
+\author{Projet C++17}
+\date{}
+
+\begin{document}
+\maketitle
+
+\section{Objectif}
+Décrire l'architecture en quatre couches adoptée pour l'application Jeu de la vie, en séparant clairement la logique métier, l'application, l'infrastructure et la présentation.
+
+\section{Vue d'ensemble}
+\begin{itemize}[leftmargin=1.2em]
+  \item \textbf{Domaine (domain/)} : logique pure, modèles et règles du jeu de Conway. Pas de dépendances I/O ou UI.
+  \item \textbf{Application (application/)} : orchestration des cas d'usage. Ports (interfaces) et façade de service.
+  \item \textbf{Infrastructure (infrastructure/)} : implémentations techniques des ports (accès fichiers, export).
+  \item \textbf{Présentation (ui/)} : interfaces utilisateur (console, SFML), dépend de l'application, pas de logique métier directe.
+\end{itemize}
+
+\section{Couches en détail}
+\subsection{Domaine}
+\begin{itemize}[leftmargin=1.2em]
+  \item \texttt{CellState} (abstraite), \texttt{AliveState}, \texttt{DeadState} : états clonables d'une cellule.
+  \item \texttt{Rule} (stratégie) et \texttt{ConwayRule} : règle B3/S23 (naissance sur 3 voisins, survie sur 2 ou 3).
+  \item \texttt{Cell} : encapsule position et état.
+  \item \texttt{Grid} : stockage 2D, comptage des voisins, comparaison.
+  \item \texttt{GameOfLife} : exécute les étapes, conserve l'itération courante, détecte la stabilité.
+\end{itemize}
+
+\subsection{Application}
+\begin{itemize}[leftmargin=1.2em]
+  \item Ports \textbf{IGridLoader} et \textbf{IGridExporter} : interfaces pour charger et exporter une grille.
+  \item \texttt{SimulationService} : façade qui orchestre une simulation
+    (charge la grille, instancie \texttt{GameOfLife}, exécute \texttt{step()}, exporte si un exporter est fourni).
+  \item \texttt{SimulationConfig} : paramètres d'exécution (fichier d'entrée, itérations max, torique, etc.).
+  \item Dépend uniquement du domaine et des interfaces (pas de dépendance concrète à l'I/O ou à SFML).
+\end{itemize}
+
+\subsection{Infrastructure}
+\begin{itemize}[leftmargin=1.2em]
+  \item \texttt{FileGridLoader} (wrap \texttt{InitialStateLoader}) : implémente \textbf{IGridLoader} pour lire une grille depuis un fichier texte.
+  \item \texttt{FileGridExporter} (wrap \texttt{GridExporter}) : implémente \textbf{IGridExporter} pour écrire une grille vers un fichier texte.
+  \item Ces classes concrètes réalisent les ports définis dans l'application.
+\end{itemize}
+
+\subsection{Présentation}
+\begin{itemize}[leftmargin=1.2em]
+  \item \texttt{ConsoleRunner}, \texttt{GraphicRunner}, \texttt{ui/main.cpp}.
+  \item Créent et injectent les implémentations infrastructure dans \texttt{SimulationService}.
+  \item Aucun accès direct aux détails du domaine, uniquement via la façade applicative.
+\end{itemize}
+
+\section{Dépendances}
+\begin{itemize}[leftmargin=1.2em]
+  \item Domaine : n'importe aucune autre couche.
+  \item Application : dépend du domaine et des interfaces (définies dans application/).
+  \item Infrastructure : dépend des ports (application) et des types du domaine qu'elle sérialise (\texttt{Grid}).
+  \item Présentation : dépend de l'application (façade/ports) et peut référencer des types du domaine pour l'affichage (lecture seule du \texttt{Grid}).
+\end{itemize}
+
+\section{Organisation des fichiers}
+\begin{itemize}[leftmargin=1.2em]
+  \item \textbf{domain/} : \texttt{CellState.h}, \texttt{AliveState.h}, \texttt{DeadState.h}, \texttt{Cell.h},
+        \texttt{Grid.h/.cpp}, \texttt{Rule.h}, \texttt{ConwayRule.h}, \texttt{GameOfLife.h/.cpp}.
+  \item \textbf{application/} : \texttt{SimulationConfig.h}, \texttt{IGridLoader.h}, \texttt{IGridExporter.h},
+        \texttt{SimulationService.h/.cpp}.
+  \item \textbf{infrastructure/} : \texttt{InitialStateLoader.h/.cpp}, \texttt{GridExporter.h/.cpp},
+        \texttt{FileGridLoader.h}, \texttt{FileGridExporter.h}.
+  \item \textbf{ui/} : \texttt{main.cpp}, \texttt{ConsoleRunner.cpp/.h}, \texttt{GraphicRunner.cpp/.h}.
+\end{itemize}
+
+\section{Flux d'exécution}
+\begin{enumerate}[leftmargin=1.2em]
+  \item L'UI construit un \texttt{SimulationConfig} et des implémentations de ports (\texttt{FileGridLoader}, \texttt{FileGridExporter}).
+  \item Elle instancie \texttt{SimulationService} avec ces dépendances (et éventuellement une \texttt{Rule}).
+  \item \texttt{SimulationService} charge la grille, crée \texttt{GameOfLife}, expose \texttt{step()}, \texttt{currentGrid()}, \texttt{isStable()}, \texttt{hasFinished()}.
+  \item Chaque \texttt{step()} applique la règle et déclenche un export si un exporter est fourni (console).
+  \item L'UI affiche/contrôle en se basant sur la façade (pas de logique métier dans l'UI).
+\end{enumerate}
+
+\section{Avantages}
+\begin{itemize}[leftmargin=1.2em]
+  \item Séparation nette des responsabilités : logique pure vs. I/O vs. présentation.
+  \item Testabilité accrue : domaine testé sans I/O ; application testable via mocks des ports.
+  \item Évolutivité : ajouter un autre loader/exporter (réseau, base de données) sans toucher au domaine ni à l'UI.
+  \item Maintenabilité : l'UI reste focalisée sur l'expérience utilisateur (console/SFML), la logique reste dans le domaine.
+\end{itemize}
+
+\section{Prochaines étapes}
+\begin{itemize}[leftmargin=1.2em]
+  \item Ajouter des interfaces pour le timing (pas de temps) si besoin (\texttt{IClock}).
+  \item Étendre les tests application avec des mocks \texttt{IGridLoader/IGridExporter} pour vérifier l'orchestration.
+  \item Documenter la DI (injection des implémentations dans l'UI) et envisager un conteneur léger si le projet grandit.
+\end{itemize}
+
+\end{document}

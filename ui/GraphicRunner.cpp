@@ -1,6 +1,6 @@
 #include "GraphicRunner.h"
-#include "InitialStateLoader.h"
-#include "GameOfLife.h"
+#include "FileGridLoader.h"
+#include "SimulationService.h"
 #include "ConwayRule.h"
 #include <SFML/Graphics.hpp>
 #include <cctype>
@@ -249,18 +249,21 @@ void GraphicRunner::run(const SimulationConfig& config) {
             }
 
             try {
-                Grid g2 = InitialStateLoader::loadFromFile(inputPath, config.toroidal);
-                GameOfLife game(g2, std::make_unique<ConwayRule>(), parsedIter);
+                SimulationConfig cfg = config;
+                cfg.inputFile = inputPath;
+                cfg.maxIterations = parsedIter;
+                FileGridLoader loader;
+                SimulationService service(cfg, loader, nullptr, std::make_unique<ConwayRule>());
 
                 const int cellSize = 20;
                 window.create(sf::VideoMode(sf::Vector2u(
-                    static_cast<unsigned int>(g2.cols() * cellSize),
-                    static_cast<unsigned int>(g2.rows() * cellSize))),
+                    static_cast<unsigned int>(service.currentGrid().cols() * cellSize),
+                    static_cast<unsigned int>(service.currentGrid().rows() * cellSize))),
                     "Game of Life - Iteration 0");
 
-                auto updateTitle = [&window, &game]() {
+                auto updateTitle = [&window, &service]() {
                     window.setTitle("Game of Life - Iteration " +
-                                    std::to_string(game.currentIteration()));
+                                    std::to_string(service.currentIteration()));
                 };
                 updateTitle();
 
@@ -287,7 +290,7 @@ void GraphicRunner::run(const SimulationConfig& config) {
                             if (keyPress->code == sf::Keyboard::Key::Space)
                                 paused = !paused;
                             if (keyPress->code == sf::Keyboard::Key::N && paused) {
-                                game.step();
+                                service.step();
                                 updateTitle();
                             }
                         }
@@ -296,17 +299,17 @@ void GraphicRunner::run(const SimulationConfig& config) {
                     float dt = clock.restart().asSeconds();
                     accumulator += dt;
 
-                    if (!paused && accumulator >= stepTime && !game.hasFinished()) {
+                    if (!paused && accumulator >= stepTime && !service.hasFinished()) {
                         accumulator = 0.f;
-                        game.step();
+                        service.step();
                         updateTitle();
                     }
 
                     window.clear(sf::Color::Black);
-                    drawGrid(window, game.currentGrid(), cellSize);
+                    drawGrid(window, service.currentGrid(), cellSize);
                     if (iterationText.has_value()) {
                         iterationText->setString("Iteration: " +
-                                                 std::to_string(game.currentIteration()));
+                                                 std::to_string(service.currentIteration()));
                         window.draw(*iterationText);
                     }
                     window.display();

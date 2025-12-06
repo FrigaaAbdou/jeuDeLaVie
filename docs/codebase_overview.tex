@@ -1,0 +1,237 @@
+\documentclass[12pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{geometry}
+\geometry{margin=2.5cm}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage{listings}
+\usepackage{sectsty}
+\renewcommand{\familydefault}{\sfdefault} % police sans-serif (Helvetica/Arial-like)
+\definecolor{navy}{RGB}{20,40,100}
+\definecolor{darkgray}{RGB}{50,50,50}
+\lstset{
+  basicstyle=\ttfamily\small,
+  columns=fullflexible,
+  keepspaces=true,
+  showstringspaces=false
+}
+\hypersetup{
+  colorlinks=true,
+  linkcolor=navy,
+  urlcolor=navy,
+  citecolor=navy
+}
+\sectionfont{\color{navy}}
+\subsectionfont{\color{navy}}
+
+\title{Jeu de la vie}
+\author{Abderrahmane Frigaa \and Mehdi Benahmed}
+\date{\today}
+
+\begin{document}
+
+% Page de garde épurée
+\begin{titlepage}
+\centering
+\vspace*{2.5cm}
+{\Huge\bfseries\color{navy}Jeu de la vie\par}
+\vspace{0.6cm}
+{\Large\color{darkgray}Documentation technique complète\par}
+\vspace{1.4cm}
+\fcolorbox{navy}{white!95!gray}{
+  \parbox{0.8\textwidth}{
+    \vspace{0.8cm}
+    \begin{center}
+    {\large\textbf{Auteurs}}\\[0.25cm]
+    Abderrahmane Frigaa\\
+    Mehdi Benahmed\\[0.6cm]
+    {\large\textbf{Date}}\\[0.25cm]
+    \today
+    \end{center}
+    \vspace{0.8cm}
+  }
+}
+\vfill
+{\small \color{darkgray}Version : \today}
+\end{titlepage}
+\setcounter{page}{1}
+
+\tableofcontents
+\newpage
+
+\section{Introduction}
+Ce document détaille l'ensemble de la base de code du projet \textbf{Jeu de la vie} (C++17, SFML), ses modules, ses flux et ses choix d'architecture. L'application implémente l'automate cellulaire de Conway avec deux modes (console et SFML) et une architecture en quatre couches pour séparer la logique métier, l'orchestration, l'infrastructure et la présentation.
+
+\section{Objectifs et principes}
+\begin{itemize}[leftmargin=1.2em]
+  \item Séparation des responsabilités (4 couches) pour testabilité et évolutivité.
+  \item Pas de dépendances I/O ou SFML dans le domaine.
+  \item Ports (interfaces) pour le chargement/export, consommation via une façade applicative.
+  \item UI réactive et autonome (console ou SFML) basée sur la façade.
+\end{itemize}
+
+\section{Architecture en couches}
+\begin{itemize}[leftmargin=1.2em]
+  \item \textbf{Domaine (domain/)} : logique pure du Jeu de Conway (modèles, règles, évolution).
+  \item \textbf{Application (application/)} : ports (interfaces) et \texttt{SimulationService} pour orchestrer la simulation.
+  \item \textbf{Infrastructure (infrastructure/)} : implémentations techniques des ports (lecture/écriture de fichiers).
+  \item \textbf{Présentation (ui/)} : interfaces utilisateur (console, SFML) consommant la façade.
+\end{itemize}
+
+\section{Dépendances et build}
+\begin{itemize}[leftmargin=1.2em]
+  \item C++17, \texttt{g++}/\texttt{clang++}.
+  \item SFML 3.x (modules graphics, window, system) pour l'UI graphique.
+  \item \texttt{pkg-config} pour récupérer les flags SFML.
+  \item \textbf{Makefile} : \texttt{make} (binaire \texttt{jeu}), \texttt{make clean}, \texttt{make test} (runner sans SFML).
+\end{itemize}
+
+\section{Couche Domaine (domain/)}
+\subsection{États et cellules}
+\begin{itemize}[leftmargin=1.2em]
+  \item \texttt{CellState} : interface abstraite (\texttt{isAlive()}, \texttt{clone()}); contrat commun pour tout état.
+  \item \texttt{AliveState}, \texttt{DeadState} : états concrets vivants/morts, clonables; utilisés par défaut pour Conway.
+  \item \texttt{Cell} : position (ligne, colonne) + pointeur possédé vers \texttt{CellState}. Copie profonde (clone) et move; \texttt{setState} remplace l'état (delete de l'ancien).
+\end{itemize}
+\subsection{Règles}
+\begin{itemize}[leftmargin=1.2em]
+  \item \texttt{Rule} : stratégie d'évolution (\texttt{nextState(const Cell\&, const Grid\&)}) renvoie un nouvel état alloué; point d'extension pour d'autres automates.
+  \item \texttt{ConwayRule} : implémente B3/S23 (naissance sur 3 voisins, survie sur 2 ou 3) et instancie les \texttt{CellState} correspondants.
+\end{itemize}
+\subsection{Grille}
+\begin{itemize}[leftmargin=1.2em]
+  \item \texttt{Grid} : matrice de \texttt{Cell}, dimensions, flag torique; initialise des cellules mortes par défaut.
+  \item \texttt{countAliveNeighbors} : comptage des voisins (avec ou sans torus via modulo).
+  \item \texttt{equals} : comparaison binaire vivante/morte cellule par cellule.
+\end{itemize}
+\subsection{Simulation}
+\begin{itemize}[leftmargin=1.2em]
+  \item \texttt{GameOfLife} : détient la grille courante et la précédente, une règle, itération courante et itération max.
+  \item \texttt{step()} : copie la grille, applique la règle à chaque cellule, incrémente l'itération.
+  \item \texttt{isStable()} : vraie si la grille courante égale la précédente.
+  \item \texttt{hasFinished()} : vrai si stable ou itérations max atteintes.
+\end{itemize}
+\subsection{Hypothèses et limites du domaine}
+\begin{itemize}[leftmargin=1.2em]
+  \item Pointeurs bruts dans \texttt{Cell} (fragilité potentielle, pas de smart pointers).
+  \item Coût : deux copies de grille par \texttt{step()} (précédente + prochaine).
+  \item Règle unique par simulation (pas de règles multiples en parallèle).
+\end{itemize}
+
+\section{Couche Application (application/)}
+\subsection{Configuration}
+\begin{itemize}[leftmargin=1.2em]
+  \item \texttt{SimulationConfig} : \texttt{inputFile}, \texttt{outputBaseName}, \texttt{maxIterations} (défaut 100), \texttt{toroidal}, \texttt{graphicMode}.
+\end{itemize}
+\subsection{Ports (interfaces)}
+\begin{itemize}[leftmargin=1.2em]
+  \item \texttt{IGridLoader} : \texttt{loadGrid(path, toroidal)} (chargement initial).
+  \item \texttt{IGridExporter} : \texttt{exportGrid(grid, baseName, iteration)} (persistance d'itérations).
+\end{itemize}
+\subsection{Façade \texttt{SimulationService}}
+\begin{itemize}[leftmargin=1.2em]
+  \item Construit \texttt{GameOfLife} via un \texttt{IGridLoader} et une \texttt{Rule} (fallback \texttt{ConwayRule}).
+  \item \texttt{step()} : délègue à \texttt{GameOfLife}, déclenche \texttt{IGridExporter} si présent (pour la console).
+  \item Expose \texttt{currentGrid()}, \texttt{isStable()}, \texttt{hasFinished()}, \texttt{currentIteration()}.
+\end{itemize}
+\subsection{Dépendances}
+\begin{itemize}[leftmargin=1.2em]
+  \item Dépend du domaine (grilles, règles) et des interfaces de chargement/export.
+  \item Ne dépend pas de SFML ou d'I/O concrètes.
+\end{itemize}
+
+\section{Couche Infrastructure (infrastructure/)}
+\subsection{Chargement}
+\begin{itemize}[leftmargin=1.2em]
+  \item \texttt{InitialStateLoader} : lit un fichier texte (première ligne \texttt{rows cols}, puis matrice 0/1), construit la \texttt{Grid}.
+  \item \texttt{FileGridLoader} : implémente \texttt{IGridLoader} en déléguant à \texttt{InitialStateLoader}.
+  \item Validation stricte : exceptions \texttt{std::runtime\_error} si fichier introuvable ou format invalide.
+\end{itemize}
+\subsection{Export}
+\begin{itemize}[leftmargin=1.2em]
+  \item \texttt{GridExporter} : écrit la grille au format texte (dimensions + matrice 0/1) dans \texttt{<base>\_<iter>.txt}.
+  \item \texttt{FileGridExporter} : implémente \texttt{IGridExporter} en déléguant à \texttt{GridExporter}.
+\end{itemize}
+\subsection{Dépendances}
+\begin{itemize}[leftmargin=1.2em]
+  \item Dépend des ports (interfaces) et des types domaine (\texttt{Grid}) pour sérialiser/désérialiser.
+  \item Pas de dépendance SFML.
+\end{itemize}
+
+\section{Couche Présentation (ui/)}
+\subsection{Console}
+\begin{itemize}[leftmargin=1.2em]
+  \item \texttt{ConsoleRunner} : crée \texttt{FileGridLoader}/\texttt{FileGridExporter}, instancie \texttt{SimulationService}, boucle jusqu'à \texttt{hasFinished()}, exporte chaque itération.
+  \item CLI : \texttt{console <input> <baseName> [maxIter]}.
+\end{itemize}
+\subsection{Graphique (SFML)}
+\begin{itemize}[leftmargin=1.2em]
+  \item \texttt{GraphicRunner} : menu SFML (titre, champs fichier/itérations, boutons start/quit), fond animé (grille scintillante), overlay d'itération.
+  \item Contrôles : Espace (pause), N (pas à pas), fermeture fenêtre.
+  \item CLI : \texttt{graphic [input] [maxIter]} (défauts sinon).
+  \item Utilise \texttt{SimulationService} sans exporter (affichage direct de la grille courante).
+\end{itemize}
+\subsection{Point d'entrée}
+\begin{itemize}[leftmargin=1.2em]
+  \item \texttt{ui/main.cpp} : parse arguments, construit \texttt{SimulationConfig}, redirige vers console ou graphique.
+\end{itemize}
+
+\section{Format des données}
+\begin{itemize}[leftmargin=1.2em]
+  \item Entrée : première ligne \texttt{<rows> <cols>}, puis \texttt{rows} lignes de \texttt{cols} entiers (0/1) séparés par des espaces.
+  \item Sortie (console) : même format, fichier par itération \texttt{<base>\_<n>.txt}.
+\end{itemize}
+
+\section{Flux d'exécution}
+\begin{enumerate}[leftmargin=1.2em]
+  \item L'UI lit la configuration (arguments, champs du menu).
+  \item L'UI crée les implémentations des ports (chargement/export) et instancie \texttt{SimulationService}.
+  \item \texttt{SimulationService} charge la grille initiale, crée \texttt{GameOfLife}.
+  \item Chaque \texttt{step()} applique la règle, incrémente l'itération, exporte si applicable.
+  \item Arrêt si \texttt{isStable()} ou itération max atteinte (console), ou boucle tant que la fenêtre est ouverte (graphique).
+\end{enumerate}
+
+\section{Tests}
+\begin{itemize}[leftmargin=1.2em]
+  \item \texttt{tests/main.cpp} : harness léger (expect/log) pour bloc stable, blinker, cellule isolée.
+  \item \texttt{make test} : construit \texttt{tests/test\_runner} (pas de SFML).
+  \item Sortie attendue : cas listés avec \texttt{OK}, puis ``All tests passed.''.
+\end{itemize}
+
+\section{Conventions et erreurs}
+\begin{itemize}[leftmargin=1.2em]
+  \item Erreurs de chargement/export : exceptions \texttt{std::runtime\_error}.
+  \item Iterations max : \texttt{SimulationConfig::maxIterations} (défaut 100), peut être surchargé via CLI.
+  \item Mode torique : \texttt{toroidal} (désactivé par défaut) pris en compte dans \texttt{Grid::countAliveNeighbors}.
+\end{itemize}
+
+\section{Analyse SOLID et limites}
+\begin{itemize}[leftmargin=1.2em]
+  \item SRP : respecté par modules séparés (règle, grille, UI, I/O, service).
+  \item OCP/DIP : ports pour loader/exporter, règle injectée ; fallback concret \texttt{ConwayRule} reste couplé par défaut.
+  \item LSP/ISP : interfaces fines pour loader/exporter ; UI dépend directement de la grille pour le rendu.
+  \item Limites : pointeurs bruts dans \texttt{Cell}, copies coûteuses de grilles à chaque \texttt{step}, dépendance UI sur le modèle (pas de DTO).
+\end{itemize}
+
+\section{Pistes d'amélioration}
+\begin{itemize}[leftmargin=1.2em]
+  \item Smart pointers ou états immuables pour \texttt{Cell}.
+  \item Double buffer sans clone par cellule pour accélérer \texttt{step()}.
+  \item Port \texttt{IClock} pour gérer le temps dans l'UI graphique.
+  \item DTO/vues pour limiter l'exposition du domaine à l'UI.
+  \item Tests supplémentaires : mode torique, motifs complexes, erreurs de parsing, intégration UI (sans SFML via mocks).
+\end{itemize}
+
+\section{Synthèse des fichiers}
+\begin{itemize}[leftmargin=1.2em]
+  \item \textbf{domain/} : \texttt{CellState.h}, \texttt{AliveState.h}, \texttt{DeadState.h}, \texttt{Cell.h}, \texttt{Rule.h}, \texttt{ConwayRule.h}, \texttt{Grid.h/.cpp}, \texttt{GameOfLife.h/.cpp}.
+  \item \textbf{application/} : \texttt{SimulationConfig.h}, \texttt{IGridLoader.h}, \texttt{IGridExporter.h}, \texttt{SimulationService.h/.cpp}.
+  \item \textbf{infrastructure/} : \texttt{InitialStateLoader.h/.cpp}, \texttt{GridExporter.h/.cpp}, \texttt{FileGridLoader.h}, \texttt{FileGridExporter.h}.
+  \item \textbf{ui/} : \texttt{main.cpp}, \texttt{ConsoleRunner.cpp/.h}, \texttt{GraphicRunner.cpp/.h}.
+  \item \textbf{tests/} : \texttt{main.cpp} (runner).
+  \item \textbf{docs/} : \texttt{architecture\_layered.tex}, \texttt{tests\_explained.tex}, \texttt{codebase\_overview.tex}.
+\end{itemize}
+
+\end{document}
